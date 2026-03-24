@@ -1,0 +1,44 @@
+# =========================
+# C++ & Visual Studio
+# =========================
+.vs/
+*.user
+*.suo
+*.dbmdl
+
+# Build results and directories
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Compiled Object files, Static and Dynamic libs
+*.obj
+*.exe
+*.dll
+*.lib
+*.pdb
+*.ilk
+*.idb
+*.iobj
+*.ipdb
+
+
+# =========================
+# Emulator Specific
+# =========================
+*.nes
+*.unf
+*.fds
+*.smc
+*.sfc
+
+# Ignore save states and battery-backed RAM saves
+*.sav
+*.state
