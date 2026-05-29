@@ -3,19 +3,35 @@
 #include <array>
 
 #include "cpu6502.h"
+#include "ppu2C02.h"
+#include "Cartridge.h"
 
 class Bus {
 public:
 	Bus();
 	~Bus();
 
-    // Devices on bus
+public:	// Devices on Main bus
+
+	// 6502 CPU
 	cpu6502 cpu;	
+	// 2C02 Picture processing unit
+	ppu2C02 ppu;
+	// Cartridge or "GamePak"
+    std::shared_ptr<Cartridge> cart;
+	// 2KB of RAM
+	uint8_t	cpuRam[2048];
 
-	// Fake RAM
-	std::array<uint8_t, 64 * 1024> ram;
+public:	// MAin Bus Read & Write
+	void cpuWrite(uint16_t addr, uint8_t data);
+	uint8_t cpuRead(uint16_t addr, bool bReadOnly = false);
 
-    // Bus Read & Write
-	void write(uint16_t addr, uint8_t data);
-	uint8_t read(uint16_t addr, bool bReadOnly = false);
+public: // System Interface
+	void insertCartridge(const std::shared_ptr<Cartridge> &cartridge);
+	void reset();
+	void clock();
+
+private:
+	// A count of how many clocks have passed
+	uint32_t nSystemClockCounter = 0;
 };
