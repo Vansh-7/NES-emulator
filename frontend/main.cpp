@@ -8,7 +8,6 @@
 #include "olcPixelGameEngine.h"
 
 
-
 class Demo_ppu2C02 : public olc::PixelGameEngine
 {
 public:
@@ -105,7 +104,7 @@ private:
 	bool OnUserCreate()
 	{
 		// Load the cartridge
-		cart = std::make_shared<Cartridge>("nestest.nes");
+		cart = std::make_shared<Cartridge>("DonkeyKong.nes");
 		
 		if (!cart->ImageValid())
 			return false;
@@ -125,7 +124,6 @@ private:
 	{
 		Clear(olc::DARK_BLUE);
 
-		// Sneaky peek of controller input in next video! ;P
 		nes.controller[0] = 0x00;
 		nes.controller[0] |= GetKey(olc::Key::X).bHeld ? 0x80 : 0x00;
 		nes.controller[0] |= GetKey(olc::Key::Z).bHeld ? 0x40 : 0x00;
@@ -178,7 +176,6 @@ private:
 
 
 		
-
 		DrawCpu(516, 2);
 		DrawCode(516, 72, 26);
 
@@ -201,8 +198,6 @@ private:
 		return true;
 	}
 };
-
-
 
 
 
