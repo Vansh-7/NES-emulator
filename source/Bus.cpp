@@ -25,7 +25,14 @@ void Bus::cpuWrite(uint16_t addr, uint8_t data)
 		// Since PPU only has 8 primary regs
 		ppu.cpuWrite(addr & 0x0007, data);
 	}
+	else if (addr == 0x4014) {
+		// A write to this address initiates a DMA transfer
+		dma_page = data;
+		dma_addr = 0x00;
+		dma_transfer = true;
+	}
 	else if (addr >= 0x4016 && addr <= 0x4017){
+		// "Lock In" controller state at this time
 		controller_state[addr & 0x0001] = controller[addr & 0x0001];
 	}
 		
@@ -46,7 +53,9 @@ uint8_t Bus::cpuRead(uint16_t addr, bool bReadOnly)
 		data = ppu.cpuRead(addr & 0x0007, bReadOnly);
 	}
 	else if (addr >= 0x4016 && addr <= 0x4017) {
+		// Read out the MSB of the controller status word
 		data = (controller_state[addr & 0x0001] & 0x80) > 0;
+		// ALWAYS shift the register on every read, forcing the bits down
 		controller_state[addr & 0x0001] <<= 1;
 	}
 
@@ -66,6 +75,11 @@ void Bus::reset()
 	cpu.reset();
 	ppu.reset();
 	nSystemClockCounter = 0;
+	dma_page = 0x00;
+	dma_addr = 0x00;
+	dma_data = 0x00;
+	dma_dummy = true;
+	dma_transfer = false;
 }
 
 void Bus::clock()
@@ -78,7 +92,48 @@ void Bus::clock()
 	// clock() is called every 3 times this fxn is called
 	// Global counter keeps the track of this
 	if (nSystemClockCounter % 3 == 0) {
-		cpu.clock();
+		// Is the system performing a DMA transfer form CPU memory to 
+		// OAM memory on PPU?...
+		if (dma_transfer) {
+			// ...Yes! We need to wait until the next even CPU clock cycle
+			// before it starts...
+			if (dma_dummy) {
+				// ...So hang around in here each clock until 1 or 2 cycles
+				// have elapsed...
+				if (nSystemClockCounter % 2 == 1)
+				{
+					// ...and finally allow DMA to start
+					dma_dummy = false;
+				}
+			}
+			else {
+				// DMA can take place!
+				if (nSystemClockCounter % 2 == 0)
+				{
+					// On even clock cycles, read from CPU bus
+					dma_data = cpuRead(dma_page << 8 | dma_addr);
+				}
+				else
+				{
+					// On odd clock cycles, write to PPU OAM
+					ppu.pOAM[dma_addr] = dma_data;
+					// Increment the lo byte of the address
+					dma_addr++;
+					// If this wraps around, we know that 256
+					// bytes have been written, so end the DMA
+					// transfer, and proceed as normal
+					if (dma_addr == 0x00)
+					{
+						dma_transfer = false;
+						dma_dummy = true;
+					}
+				}
+			}
+		}
+		else {
+			// No DMA happening, the CPU is in control
+			cpu.clock();
+		}		
 	}
 
 	// The PPU is capable of emitting an interrupt to indicate the
