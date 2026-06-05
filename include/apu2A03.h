@@ -58,7 +58,8 @@ private:
 
 		// Pass in a lambda function to manipulate the sequence as required
 		// by the owner of this sequencer module
-		uint8_t clock(bool bEnable, std::function<void(uint32_t &s)> funcManip)
+		template<typename F>
+		uint8_t clock(bool bEnable, F funcManip)
 		{
 			if (bEnable)
 			{
@@ -183,11 +184,9 @@ private:
 
 		void track(uint16_t &target)
 		{
-			if (enabled)
-			{
-				change = target >> shift;
-				mute = (target < 8) || (target > 0x7FF);
-			}
+			change = target >> shift;
+			mute = (target < 8) || (target > 0x7FF);
+
 		}
 
 		bool clock(uint16_t &target, bool channel)
@@ -226,7 +225,7 @@ private:
 
 	double dGlobalTime = 0.0;
 
-	// Square Wave Pulse Channel 1
+	// Square Wave Pulse Channel 1 (melody)
 	bool pulse1_enable = false;
 	bool pulse1_halt = false;
 	double pulse1_sample = 0.0;
@@ -237,7 +236,7 @@ private:
 	lengthcounter pulse1_lc;
 	sweeper pulse1_sweep;
 
-	// Square Wave Pulse Channel 2
+	// Square Wave Pulse Channel 2 (Harmony channel)
 	bool pulse2_enable = false;
 	bool pulse2_halt = false;
 	double pulse2_sample = 0.0;
@@ -248,15 +247,38 @@ private:
 	lengthcounter pulse2_lc;
 	sweeper pulse2_sweep;
 
-	// Noise Channel
-	bool noise_enable = false;
-	bool noise_halt = false;
+	// Triangle Channel (Bass)
+	sequencer triangle_seq;
+	oscpulse triangle_osc;
+	lengthcounter triangle_lc;
+	bool triangle_enable = false;
+	bool triangle_halt = false;
+	double triangle_sample = 0.0;
+	double triangle_output = 0.0;
+	// Triangle has a unique "linear counter" instead of an envelope
+	uint8_t triangle_linear_counter = 0;
+	uint8_t triangle_linear_reload = 0;
+	bool triangle_linear_reload_flag = false;
+
+	// Noise Channel (Percussion, explosions and snare drums)
+	sequencer noise_seq;
 	envelope noise_env;
 	lengthcounter noise_lc;
-	sequencer noise_seq;
-	double noise_sample = 0;
-	double noise_output = 0;
+	bool noise_enable = false;
+	bool noise_halt = false;
+	double noise_sample = 0.0;
+	double noise_output = 0.0;
+	// Noise uses a Linear Feedback Shift Register (LFSR) for randomness
+	uint16_t noise_lfsr = 1; // MUST start at 1, not 0!
+	bool noise_mode = false;
 
+	// DPCM CHANNEL (Voice/Samples)
+	bool dpcm_enable = false;
+	bool dpcm_loop = false;
+	bool dpcm_irq = false;
+	uint16_t dpcm_addr_load = 0x0000;
+	uint16_t dpcm_length_load = 0x0000;
+	uint8_t dpcm_output = 0; // 7-bit output volume
 
 public:
 	uint16_t pulse1_visual = 0;

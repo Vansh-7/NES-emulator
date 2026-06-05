@@ -89,40 +89,68 @@ void apu2A03::cpuWrite(uint16_t addr, uint8_t data)
 		break;
 
 	case 0x4008:
+		triangle_linear_reload = data & 0x7F;
+        triangle_halt = (data & 0x80) != 0;
+		break;
+
+	case 0x400A:
+		triangle_seq.reload = (triangle_seq.reload & 0xFF00) | data;
+		break;
+	
+	case 0x400B:
+		triangle_seq.reload = (uint16_t)((data & 0x07) << 8) | (triangle_seq.reload & 0x00FF);
+        triangle_seq.timer = triangle_seq.reload;
+        triangle_lc.counter = length_table[data >> 3]; 
+        triangle_linear_reload_flag = true;
 		break;
 
 	case 0x400C:
 		noise_env.volume = (data & 0x0F);
-		noise_env.disable = (data & 0x10);
-		noise_halt = (data & 0x20);
+		noise_env.disable = (data & 0x10) != 0;
+		noise_halt = (data & 0x20) != 0;
 		break;
 
 	case 0x400E:
-		switch (data & 0x0F)
-		{
-		case 0x00: noise_seq.reload = 0; break;
-		case 0x01: noise_seq.reload = 4; break;
-		case 0x02: noise_seq.reload = 8; break;
-		case 0x03: noise_seq.reload = 16; break;
-		case 0x04: noise_seq.reload = 32; break;
-		case 0x05: noise_seq.reload = 64; break;
-		case 0x06: noise_seq.reload = 96; break;
-		case 0x07: noise_seq.reload = 128; break;
-		case 0x08: noise_seq.reload = 160; break;
-		case 0x09: noise_seq.reload = 202; break;
-		case 0x0A: noise_seq.reload = 254; break;
-		case 0x0B: noise_seq.reload = 380; break;
-		case 0x0C: noise_seq.reload = 508; break;
-		case 0x0D: noise_seq.reload = 1016; break;
-		case 0x0E: noise_seq.reload = 2034; break;
-		case 0x0F: noise_seq.reload = 4068; break;
-		}
+		// Noise periods lookup table
+        static const uint16_t noise_periods[16] = { 4, 8, 16, 32, 64, 96, 128, 160, 202, 254, 380, 508, 762, 1016, 2034, 4068 };
+        noise_seq.reload = noise_periods[data & 0x0F];
+        
+		// Capture Bit 7 to determine Mode 0 (White Noise) or Mode 1 (Metallic Noise)
+        noise_mode = (data & 0x80) != 0;
+		break;
+
+	case 0x4010:
+		dpcm_irq = (data & 0x80) != 0;
+        dpcm_loop = (data & 0x40) != 0;
+		// The bottom 4 bits (data & 0x0F) control the sample playback rate
+		break;
+
+	case 0x4011:
+		// Direct load of the 7-bit output level
+        dpcm_output = data & 0x7F;
+		break;
+	
+	case 0x4012:
+		// Sample address starts at $C000 + (data * 64)
+        dpcm_addr_load = 0xC000 + ((uint16_t)data << 6);
+		break;
+
+	case 0x4013:
+		// Sample length is (data * 16) + 1 bytes
+        dpcm_length_load = ((uint16_t)data << 4) + 1;
 		break;
 
 	case 0x4015: // APU STATUS
 		pulse1_enable = data & 0x01;
 		pulse2_enable = data & 0x02;
-		noise_enable = data & 0x04;
+		triangle_enable = data & 0x04;
+		noise_enable = data & 0x08;
+		dpcm_enable = data & 0x10;
+
+		if (!pulse1_enable) pulse1_lc.counter = 0;
+        if (!pulse2_enable) pulse2_lc.counter = 0;
+        if (!triangle_enable) triangle_lc.counter = 0;
+        if (!noise_enable) noise_lc.counter = 0;
 		break;
 
 	case 0x400F:
@@ -196,6 +224,15 @@ void apu2A03::clock()
 			pulse1_env.clock(pulse1_halt);
 			pulse2_env.clock(pulse2_halt);
 			noise_env.clock(noise_halt);
+
+			// Update Triangle Linear Counter
+			if (triangle_linear_reload_flag)
+				triangle_linear_counter = triangle_linear_reload;
+			else if (triangle_linear_counter > 0)
+				triangle_linear_counter--;
+
+			if (!triangle_halt)
+				triangle_linear_reload_flag = false;
 		}
 
 
@@ -205,6 +242,7 @@ void apu2A03::clock()
 		{
 			pulse1_lc.clock(pulse1_enable, pulse1_halt);
 			pulse2_lc.clock(pulse2_enable, pulse2_halt);
+			triangle_lc.clock(triangle_enable, triangle_halt);
 			noise_lc.clock(noise_enable, noise_halt);
 			pulse1_sweep.clock(pulse1_seq.reload, 0);
 			pulse2_sweep.clock(pulse2_seq.reload, 1);
@@ -213,50 +251,67 @@ void apu2A03::clock()
         // Update Pulse1 Channel ================================
         pulse1_seq.clock(pulse1_enable, [](uint32_t &s)
         {
-            // Shift right by 1 bit, wrapping around
             s = ((s & 0x0001) << 7) | ((s & 0x00FE) >> 1);
         });
 
-        pulse1_osc.frequency = 1789773.0 / (16.0 * (double)(pulse1_seq.reload + 1));
-        pulse1_osc.amplitude = (double)(pulse1_env.output -1) / 16.0;
-        pulse1_sample = pulse1_osc.sample(dGlobalTime);
-
-        if (pulse1_lc.counter > 0 && pulse1_seq.timer >= 8 && !pulse1_sweep.mute && pulse1_env.output > 2)
-            pulse1_output += (pulse1_sample - pulse1_output) * 0.5;
+        // Use proper > 0 volume check, and mathematically correct 15.0 division
+        if (pulse1_lc.counter > 0 && pulse1_seq.timer >= 8 && !pulse1_sweep.mute && pulse1_env.output > 0)
+            pulse1_output = (double)pulse1_seq.output * ((double)pulse1_env.output / 15.0);
         else
             pulse1_output = 0;
+
 
         // Update Pulse2 Channel ================================
         pulse2_seq.clock(pulse2_enable, [](uint32_t &s)
         {
-            // Shift right by 1 bit, wrapping around
             s = ((s & 0x0001) << 7) | ((s & 0x00FE) >> 1);
         });
 
-        pulse2_osc.frequency = 1789773.0 / (16.0 * (double)(pulse2_seq.reload + 1));
-        pulse2_osc.amplitude = (double)(pulse2_env.output-1) / 16.0;
-        pulse2_sample = pulse2_osc.sample(dGlobalTime);
-
-        if (pulse2_lc.counter > 0 && pulse2_seq.timer >= 8 && !pulse2_sweep.mute && pulse2_env.output > 2)
-            pulse2_output += (pulse2_sample - pulse2_output) * 0.5;
+        if (pulse2_lc.counter > 0 && pulse2_seq.timer >= 8 && !pulse2_sweep.mute && pulse2_env.output > 0)
+            pulse2_output = (double)pulse2_seq.output * ((double)pulse2_env.output / 15.0);
         else
             pulse2_output = 0;
 
+		// Update Triangle Channel ==============================
+		// The hardcoded jagged hardware array the NES uses for bass
+        static const uint8_t triangle_sequence[32] = {
+            15, 14, 13, 12, 11, 10,  9,  8,  7,  6,  5,  4,  3,  2,  1,  0,
+             0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15
+        };
 
-		noise_seq.clock(noise_enable, [](uint32_t &s)
-			{
-				s = (((s & 0x0001) ^ ((s & 0x0002) >> 1)) << 14) | ((s & 0x7FFF) >> 1);
-			});
+        triangle_seq.clock(triangle_enable, [&](uint32_t &s)
+        {
+            // Only advance the sequence if counters are active
+            if (triangle_lc.counter > 0 && triangle_linear_counter > 0 && triangle_seq.reload > 2)
+            {
+                s++;
+                if (s >= 32) s = 0;
+            }
+        });
 
-		if (noise_lc.counter > 0 && noise_seq.timer >= 8)
-		{
-			noise_output = (double)noise_seq.output * ((double)(noise_env.output-1) / 16.0);
-		}
+        triangle_output = (double)triangle_sequence[triangle_seq.sequence] / 15.0;
+
+		// Update Noise Channel =================================
+		noise_seq.clock(noise_enable, [&](uint32_t &s)
+        {
+            // Mode 0 uses bit 1, Mode 1 uses bit 6
+            uint16_t shift = noise_mode ? 6 : 1;
+            uint16_t feedback = (noise_lfsr & 0x0001) ^ ((noise_lfsr & (1 << shift)) >> shift);
+            noise_lfsr = (noise_lfsr >> 1) | (feedback << 14);
+        });
+
+        if (noise_lc.counter > 0 && (noise_lfsr & 0x0001) == 0 && noise_env.output > 0)
+        {
+            noise_output = (double)noise_env.output / 15.0; 
+        }
+        else
+        {
+            noise_output = 0;
+        }
 
 		if (!pulse1_enable) pulse1_output = 0;
 		if (!pulse2_enable) pulse2_output = 0;
 		if (!noise_enable) noise_output = 0;
-
 	}
 
 	// Frequency sweepers change at high frequency
@@ -272,10 +327,44 @@ void apu2A03::clock()
 
 double apu2A03::GetOutputSample()
 {
-    // Combine Pulse 1, Pulse 2, and Noise using a linear approximation
-    return ((1.0 * pulse1_output) - 0.8) * 0.1 +
-           ((1.0 * pulse2_output) - 0.8) * 0.1 +
-           ((2.0 * (noise_output - 0.5))) * 0.1;	
+    // Scale the PC 0.0-1.0 outputs back to authentic 0-15 Hardware Levels
+    double p1 = pulse1_output * 15.0;
+    double p2 = pulse2_output * 15.0;
+    double tr = triangle_output * 15.0;
+    double nn = noise_output * 15.0;
+    double dp = (double)dpcm_output; // DPCM is already 0-127
+
+    // The Authentic Motherboard Resistor Mixer Formula
+    double pulse_out = 0.0;
+    if (p1 + p2 > 0.0)
+    {
+        pulse_out = 95.88 / ((8128.0 / (p1 + p2)) + 100.0);
+    }
+
+    double tnd_out = 0.0;
+    if (tr + nn + dp > 0.0)
+    {
+        tnd_out = 159.79 / (1.0 / ((tr / 8227.0) + (nn / 12241.0) + (dp / 22638.0)) + 100.0);
+    }
+
+    double raw_sample = pulse_out + tnd_out;
+
+    // Authentic CRT TV Filter Chain
+    // The NES output passes through specific electrical filters before hitting the TV speaker.
+
+    // High-Pass Filter (90Hz) - Removes DC offset and centers the wave perfectly on 0.0
+    static double hp_prev_in = 0.0;
+    static double hp_prev_out = 0.0;
+    double hp_out = 0.996 * hp_prev_out + 0.996 * (raw_sample - hp_prev_in);
+    hp_prev_in = raw_sample;
+    hp_prev_out = hp_out;
+
+    // Low-Pass Filter (14kHz) - Muffles the harsh digital razor-edges (The "CRT" sound)
+    static double lp_prev_out = 0.0;
+    double lp_out = lp_prev_out + 0.5 * (hp_out - lp_prev_out);
+    lp_prev_out = lp_out;
+
+    return lp_out; 
 }
 
 void apu2A03::reset()
