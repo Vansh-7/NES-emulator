@@ -11,6 +11,12 @@ Bus::~Bus()
 {
 }
 
+void Bus::SetSampleFrequency(uint32_t sample_rate)
+{
+	dAudioTimePerSystemSample = 1.0 / (double)sample_rate;
+	dAudioTimePerNESClock = 1.0 / 5369318.0; // PPU Clock Frequency
+}
+
 void Bus::cpuWrite(uint16_t addr, uint8_t data) 
 {
 	if (cart->cpuWrite(addr, data)) {
@@ -24,6 +30,10 @@ void Bus::cpuWrite(uint16_t addr, uint8_t data)
 		// PPU Address range, mirrored every 8 (addr % 8)
 		// Since PPU only has 8 primary regs
 		ppu.cpuWrite(addr & 0x0007, data);
+	}
+	else if ((addr >= 0x4000 && addr <= 0x4013) || addr == 0x4015 || addr == 0x4017) //  NES APU
+	{
+		apu.cpuWrite(addr, data);
 	}
 	else if (addr == 0x4014) {
 		// A write to this address initiates a DMA transfer
@@ -51,6 +61,10 @@ uint8_t Bus::cpuRead(uint16_t addr, bool bReadOnly)
 	else if (addr >= 0x2000 && addr <= 0x3FFF) {
 		// PPU Address range, mirrored every 8
 		data = ppu.cpuRead(addr & 0x0007, bReadOnly);
+	}
+	else if (addr == 0x4015) {
+		// APU Read Status
+		data = apu.cpuRead(addr);
 	}
 	else if (addr >= 0x4016 && addr <= 0x4017) {
 		// Read out the MSB of the controller status word
@@ -82,11 +96,14 @@ void Bus::reset()
 	dma_transfer = false;
 }
 
-void Bus::clock()
+bool Bus::clock()
 {	
 	// Fastest clock freq is equivaled to PPU clock
 	// So PPU is clocked each time this fnx is called
 	ppu.clock();
+
+	//...also clock APU
+	apu.clock();
 
 	// CPU runs 3x slower than PPU
 	// clock() is called every 3 times this fxn is called
@@ -136,6 +153,16 @@ void Bus::clock()
 		}		
 	}
 
+	// Synchronising with Audio
+	bool bAudioSampleReady = false;
+	dAudioTime += dAudioTimePerNESClock;
+	if (dAudioTime >= dAudioTimePerSystemSample)
+	{
+		dAudioTime -= dAudioTimePerSystemSample;
+		dAudioSample = apu.GetOutputSample();
+		bAudioSampleReady = true;
+	}
+
 	// The PPU is capable of emitting an interrupt to indicate the
 	// vertical blanking period has been entered. If it has, we need
 	// to send that irq to the CPU.
@@ -145,4 +172,6 @@ void Bus::clock()
 	}
 
 	nSystemClockCounter++;
+
+	return bAudioSampleReady;
 }
