@@ -4,6 +4,7 @@
 
 #include "Bus.h"
 #include "cpu6502.h"
+#include "apu2A03.h"
 
 #define OLC_PGE_APPLICATION
 #include "olcPixelGameEngine.h"
@@ -123,6 +124,8 @@ private:
 
 	static Demo_NES* pInstance;
 
+	// The Audio Thread Callback
+	// This function is called 44,100 times a second by your Windows sound card!
 	static float SoundOut(int nChannel, float fGlobalTime, float fTimeStep)
 	{
 		if (nChannel == 0)
@@ -137,7 +140,7 @@ private:
 	bool OnUserCreate() override
 	{
 		// Load the cartridge
-		cart = std::make_shared<Cartridge>("ROM/DonkeyKong.nes");
+		cart = std::make_shared<Cartridge>("ROM/SuperMarioBros.nes");
 		
 		if (!cart->ImageValid())
 			return false;
@@ -163,7 +166,8 @@ private:
 	}
 
 	bool OnUserDestroy() override
-	{
+	{	
+		// Safely shut down the background audio thread when the app closes
 		olc::SOUND::DestroyAudio();
 		return true;
 	}
