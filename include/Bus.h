@@ -4,6 +4,7 @@
 
 #include "cpu6502.h"
 #include "ppu2C02.h"
+#include "apu2A03.h"
 #include "Cartridge.h"
 
 class Bus {
@@ -17,12 +18,25 @@ public:	// Devices on Main bus
 	cpu6502 cpu;	
 	// 2C02 Picture processing unit
 	ppu2C02 ppu;
+	// 2A03 Audio processing unit
+	apu2A03 apu;
 	// Cartridge or "GamePak"
     std::shared_ptr<Cartridge> cart;
 	// 2KB of RAM
 	uint8_t	cpuRam[2048];
 	// Controllers
 	uint8_t controller[2];
+
+	// Synchronisation with system Audio
+public:
+	void SetSampleFrequency(uint32_t sample_rate);
+	double dAudioSample = 0.0;
+
+private:
+	double dAudioTime = 0.0;
+	double dAudioGlobalTime = 0.0;
+	double dAudioTimePerNESClock = 0.0;
+	double dAudioTimePerSystemSample = 0.0f;
 
 public:	// MAin Bus Read & Write
 	void cpuWrite(uint16_t addr, uint8_t data);
@@ -32,7 +46,7 @@ public: // System Interface
 	// connects cartridge to internal bus
 	void insertCartridge(const std::shared_ptr<Cartridge> &cartridge);
 	void reset();
-	void clock();
+	bool clock();
 
 private:
 	// A count of how many clocks have passed
