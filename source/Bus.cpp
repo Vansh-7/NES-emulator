@@ -171,6 +171,13 @@ bool Bus::clock()
 		cpu.nmi();
 	}
 
+	// Check if cartridge is requesting IRQ
+	if (cart->GetMapper()->irqState())
+	{
+		cart->GetMapper()->irqClear();
+		cpu.irq();		
+	}
+
 	nSystemClockCounter++;
 
 	return bAudioSampleReady;
