@@ -5,7 +5,7 @@
 #include <cstdint>
 
 
-#define LOGMODE // enable logging
+//#define LOGMODE // enable logging
 
 #ifdef LOGMODE
 #include <stdio.h>

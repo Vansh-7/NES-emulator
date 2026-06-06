@@ -94,40 +94,6 @@ olc::Sprite& ppu2C02::GetScreen()
 
 olc::Sprite& ppu2C02::GetPatternTable(uint8_t i, uint8_t palette)
 {
-	// This function draw the CHR ROM for a given pattern table into
-	// an olc::Sprite, using a specified palette. Pattern tables consist
-	// of 16x16 "tiles or characters". It is independent of the running
-	// emulation and using it does not change the systems state, though
-	// it gets all the data it needs from the live system. Consequently,
-	// if the game has not yet established palettes or mapped to relevant
-	// CHR ROM banks, the sprite may look empty. This approach permits a 
-	// "live" extraction of the pattern table exactly how the NES, and 
-	// ultimately the player would see it.
-
-	// A tile consists of 8x8 pixels. On the NES, pixels are 2 bits, which
-	// gives an index into 4 different colours of a specific palette. There
-	// are 8 palettes to choose from. Colour "0" in each palette is effectively
-	// considered transparent, as those locations in memory "mirror" the global
-	// background colour being used. This mechanics of this are shown in 
-	// detail in ppuRead() & ppuWrite()
-
-	// Characters on NES
-	// ~~~~~~~~~~~~~~~~~
-	// The NES stores characters using 2-bit pixels. These are not stored sequentially
-	// but in singular bit planes. For example:
-	//
- 	// 2-Bit Pixels       LSB Bit Plane     MSB Bit Plane
-	// 0 0 0 0 0 0 0 0	  0 0 0 0 0 0 0 0   0 0 0 0 0 0 0 0
-	// 0 1 1 0 0 1 1 0	  0 1 1 0 0 1 1 0   0 0 0 0 0 0 0 0
-	// 0 1 2 0 0 2 1 0	  0 1 1 0 0 1 1 0   0 0 1 0 0 1 0 0
-	// 0 0 0 0 0 0 0 0 =  0 0 0 0 0 0 0 0 + 0 0 0 0 0 0 0 0
-	// 0 1 1 0 0 1 1 0	  0 1 1 0 0 1 1 0   0 0 0 0 0 0 0 0
-	// 0 0 1 1 1 1 0 0	  0 0 1 1 1 1 0 0   0 0 0 0 0 0 0 0
-	// 0 0 0 2 2 0 0 0	  0 0 0 1 1 0 0 0   0 0 0 1 1 0 0 0
-	// 0 0 0 0 0 0 0 0	  0 0 0 0 0 0 0 0   0 0 0 0 0 0 0 0
-	//
-	// The planes are stored as 8 bytes of LSB, followed by 8 bytes of MSB
-
 	// Loop through all 16x16 tiles
 	for (uint16_t nTileY = 0; nTileY < 16; nTileY++)
 	{
@@ -391,7 +357,7 @@ uint8_t ppu2C02::ppuRead(uint16_t addr, bool rdonly)
 	{
 		addr &= 0x0FFF;
 
-		if (cart->mirror == Cartridge::MIRROR::VERTICAL)
+		if (cart->Mirror() == MIRROR::VERTICAL)
 		{
 			// Vertical
 			if (addr >= 0x0000 && addr <= 0x03FF)
@@ -403,7 +369,7 @@ uint8_t ppu2C02::ppuRead(uint16_t addr, bool rdonly)
 			if (addr >= 0x0C00 && addr <= 0x0FFF)
 				data = tblName[1][addr & 0x03FF];
 		}
-		else if (cart->mirror == Cartridge::MIRROR::HORIZONTAL)
+		else if (cart->Mirror() == MIRROR::HORIZONTAL)
 		{
 			// Horizontal
 			if (addr >= 0x0000 && addr <= 0x03FF)
@@ -444,7 +410,7 @@ void ppu2C02::ppuWrite(uint16_t addr, uint8_t data)
 	else if (addr >= 0x2000 && addr <= 0x3EFF)
 	{
 		addr &= 0x0FFF;
-		if (cart->mirror == Cartridge::MIRROR::VERTICAL)
+		if (cart->Mirror() == MIRROR::VERTICAL)
 		{
 			// Vertical
 			if (addr >= 0x0000 && addr <= 0x03FF)
@@ -456,7 +422,7 @@ void ppu2C02::ppuWrite(uint16_t addr, uint8_t data)
 			if (addr >= 0x0C00 && addr <= 0x0FFF)
 				tblName[1][addr & 0x03FF] = data;
 		}
-		else if (cart->mirror == Cartridge::MIRROR::HORIZONTAL)
+		else if (cart->Mirror() == MIRROR::HORIZONTAL)
 		{
 			// Horizontal
 			if (addr >= 0x0000 && addr <= 0x03FF)
@@ -505,6 +471,8 @@ void ppu2C02::reset()
 	control.reg = 0x00;
 	vram_addr.reg = 0x0000;
 	tram_addr.reg = 0x0000;
+	scanline_trigger = false;
+	odd_frame = false;
 }
 
 void ppu2C02::clock()
@@ -513,10 +481,6 @@ void ppu2C02::clock()
 	// a state machine going through the motions of fetching background 
 	// information and sprite information, compositing them into a pixel
 	// to be output.
-
-	// The lambda functions (functions inside functions) contain the various
-	// actions to be performed depending upon the output of the state machine
-	// for a given scanline/cycle combination
 
 	// ==============================================================================
 	// Increment the background tile "pointer" one tile/column horizontally
@@ -1152,24 +1116,27 @@ void ppu2C02::clock()
 	// the current background colour in effect
 	if (mask.render_background)
 	{
-		// Handle Pixel Selection by selecting the relevant bit
-		// depending upon fine x scolling. This has the effect of
-		// offsetting ALL background rendering by a set number
-		// of pixels, permitting smooth scrolling
-		uint16_t bit_mux = 0x8000 >> fine_x;
+		if (mask.render_background_left || (cycle >= 9))
+		{
+			// Handle Pixel Selection by selecting the relevant bit
+			// depending upon fine x scolling. This has the effect of
+			// offsetting ALL background rendering by a set number
+			// of pixels, permitting smooth scrolling
+			uint16_t bit_mux = 0x8000 >> fine_x;
 
-		// Select Plane pixels by extracting from the shifter 
-		// at the required location. 
-		uint8_t p0_pixel = (bg_shifter_pattern_lo & bit_mux) > 0;
-		uint8_t p1_pixel = (bg_shifter_pattern_hi & bit_mux) > 0;
+			// Select Plane pixels by extracting from the shifter 
+			// at the required location. 
+			uint8_t p0_pixel = (bg_shifter_pattern_lo & bit_mux) > 0;
+			uint8_t p1_pixel = (bg_shifter_pattern_hi & bit_mux) > 0;
 
-		// Combine to form pixel index
-		bg_pixel = (p1_pixel << 1) | p0_pixel;
+			// Combine to form pixel index
+			bg_pixel = (p1_pixel << 1) | p0_pixel;
 
-		// Get palette
-		uint8_t bg_pal0 = (bg_shifter_attrib_lo & bit_mux) > 0;
-		uint8_t bg_pal1 = (bg_shifter_attrib_hi & bit_mux) > 0;
-		bg_palette = (bg_pal1 << 1) | bg_pal0;
+			// Get palette
+			uint8_t bg_pal0 = (bg_shifter_attrib_lo & bit_mux) > 0;
+			uint8_t bg_pal1 = (bg_shifter_attrib_hi & bit_mux) > 0;
+			bg_palette = (bg_pal1 << 1) | bg_pal0;
+		}
 	}
 
 	// Foreground =============================================================
@@ -1179,46 +1146,49 @@ void ppu2C02::clock()
 							   // more important than the background
 	if (mask.render_sprites)
 	{
-		// Iterate through all sprites for this scanline. This is to maintain
-		// sprite priority. As soon as we find a non transparent pixel of
-		// a sprite we can abort
+		
+		if (mask.render_sprites_left || (cycle >= 9)) {
+			// Iterate through all sprites for this scanline. This is to maintain
+			// sprite priority. As soon as we find a non transparent pixel of
+			// a sprite we can abort
 
-		bSpriteZeroBeingRendered = false;
+			bSpriteZeroBeingRendered = false;
 
-		for (uint8_t i = 0; i < sprite_count; i++)
-		{
-			// Scanline cycle has "collided" with sprite, shifters taking over
-			if (spriteScanline[i].x == 0) 
+			for (uint8_t i = 0; i < sprite_count; i++)
 			{
-				// Note Fine X scrolling does not apply to sprites, the game
-				// should maintain their relationship with the background. So
-				// we'll just use the MSB of the shifter
-				
-				// Determine the pixel value...
-				uint8_t fg_pixel_lo = (sprite_shifter_pattern_lo[i] & 0x80) > 0;
-				uint8_t fg_pixel_hi = (sprite_shifter_pattern_hi[i] & 0x80) > 0;
-				fg_pixel = (fg_pixel_hi << 1) | fg_pixel_lo;
-
-				// Extract the palette from the bottom two bits. Recall
-				// that foreground palettes are the latter 4 in the 
-				// palette memory.
-				fg_palette = (spriteScanline[i].attribute & 0x03) + 0x04;
-				fg_priority = (spriteScanline[i].attribute & 0x20) == 0;
-
-				// If pixel is not transparent, we render it, and dont
-				// bother checking the rest because the earlier sprites
-				// in the list are higher priority
-				if (fg_pixel != 0)
+				// Scanline cycle has "collided" with sprite, shifters taking over
+				if (spriteScanline[i].x == 0) 
 				{
-					if (i == 0) // Is this sprite zero?
-					{
-						bSpriteZeroBeingRendered = true;
-					}
+					// Note Fine X scrolling does not apply to sprites, the game
+					// should maintain their relationship with the background. So
+					// we'll just use the MSB of the shifter
+					
+					// Determine the pixel value...
+					uint8_t fg_pixel_lo = (sprite_shifter_pattern_lo[i] & 0x80) > 0;
+					uint8_t fg_pixel_hi = (sprite_shifter_pattern_hi[i] & 0x80) > 0;
+					fg_pixel = (fg_pixel_hi << 1) | fg_pixel_lo;
 
-					break;
-				}				
-			}
-		}		
+					// Extract the palette from the bottom two bits. Recall
+					// that foreground palettes are the latter 4 in the 
+					// palette memory.
+					fg_palette = (spriteScanline[i].attribute & 0x03) + 0x04;
+					fg_priority = (spriteScanline[i].attribute & 0x20) == 0;
+
+					// If pixel is not transparent, we render it, and dont
+					// bother checking the rest because the earlier sprites
+					// in the list are higher priority
+					if (fg_pixel != 0)
+					{
+						if (i == 0) // Is this sprite zero?
+						{
+							bSpriteZeroBeingRendered = true;
+						}
+
+						break;
+					}				
+				}
+			}		
+		}
 	}
 
 	// Now we have a background pixel and a foreground pixel. They need
@@ -1281,7 +1251,7 @@ void ppu2C02::clock()
 				// The left edge of the screen has specific switches to control
 				// its appearance. This is used to smooth inconsistencies when
 				// scrolling (since sprites x coord must be >= 0)
-				if (~(mask.render_background_left | mask.render_sprites_left))
+				if (!(mask.render_background_left | mask.render_sprites_left))
 				{
 					if (cycle >= 9 && cycle < 258)
 					{
@@ -1304,6 +1274,13 @@ void ppu2C02::clock()
 	sprScreen->SetPixel(cycle - 1, scanline, GetColourFromPaletteRam(palette, pixel));
 
 	// Advance renderer - it never stops, it's relentless
+	if(mask.render_background || mask.render_sprites)
+		if (cycle == 260 && scanline < 240)
+		{
+			cart->GetMapper()->scanline();
+		}
+
+
 	cycle++;
 	if (cycle >= 341)
 	{
@@ -1313,6 +1290,7 @@ void ppu2C02::clock()
 		{
 			scanline = -1;
 			frame_complete = true;
+			odd_frame = !odd_frame;
 		}
 	}
 }
