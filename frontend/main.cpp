@@ -137,7 +137,7 @@ private:
 	bool OnUserCreate() override
 	{
 		// Load the cartridge
-		cart = std::make_shared<Cartridge>("ROM/DonkeyKong.nes");
+		cart = std::make_shared<Cartridge>("ROM/SuperMarioBros.nes");
 		
 		if (!cart->ImageValid())
 			return false;
