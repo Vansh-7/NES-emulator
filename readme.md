@@ -1,4 +1,7 @@
 # 👾 NES Emulator in C++
+![C++17](https://img.shields.io/badge/C++-17-blue.svg?style=flat&logo=c%2B%2B)
+![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey.svg?style=flat&logo=windows)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 
 A highly accurate, hardware-level emulator for the Nintendo Entertainment System (NES), written entirely from scratch in C++17. 
 
@@ -9,8 +12,8 @@ This project is a deep dive into low-level system architecture, successfully sim
 ![NES Emulator Gameplay](assets/NES_gameplay.png)
 *Gameplay demonstration showing accurate background scrolling, foreground sprite priority, and real-time palette rendering.*
 
-![Hardware Architecture](assets/NES_architecture.png)
-*High-level view of the emulator's hardware bus and component routing.*
+![NES Emulator Gameplay](assets/NES_gameplay.gif)
+*Watch the emulator running in real-time with cycle-accurate sprite rendering.*
 
 ---
 
@@ -71,3 +74,7 @@ The emulator uses the PC keyboard mapped to the original NES gamepad layout. Don
 This emulator models the physical motherboard of the NES. The core system relies on a `Bus` object that wires the CPU, PPU, and APU together. 
 
 The most significant technical challenge overcome during development was eliminating APU audio stuttering. By utilizing C++ templates for the audio sequencer clock instead of `std::function`, heap allocations were eliminated from the execution loop, achieving a zero-cost abstraction that completely resolved CPU bottlenecks.
+
+This diagram illustrates the bus-based architecture used to route data between the CPU, PPU, and APU.
+![Hardware Architecture](assets/NES_architecture.png)
+*Detailed hardware bus and component routing diagram.*
