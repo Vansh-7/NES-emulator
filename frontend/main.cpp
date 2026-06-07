@@ -137,7 +137,11 @@ private:
 	bool OnUserCreate() override
 	{
 		// Load the cartridge
+<<<<<<< Updated upstream
 		cart = std::make_shared<Cartridge>("ROM/DonkeyKong.nes");
+=======
+		cart = std::make_shared<Cartridge>("ROM/Zelda II - The Adventure of Link.nes");
+>>>>>>> Stashed changes
 		
 		if (!cart->ImageValid())
 			return false;
