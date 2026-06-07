@@ -26,14 +26,12 @@ public:
 	olc::Sprite& GetScreen();
 	olc::Sprite& GetNameTable(uint8_t i);
 	olc::Sprite& GetPatternTable(uint8_t i, uint8_t palette);
-
 	olc::Pixel& GetColourFromPaletteRam(uint8_t palette, uint8_t pixel);
-
 	bool frame_complete = false;
 
 private:
 
-	union
+	union PPUSTATUS
 	{
 		struct
 		{
@@ -47,7 +45,7 @@ private:
 	} status;
 
 
-	union
+	union PPUMASK
 	{
 		struct
 		{
@@ -111,6 +109,7 @@ private:
 	// Pixel "dot" position information
 	int16_t scanline = 0;
 	int16_t cycle = 0;
+	bool odd_frame = false;
 
 	// Background rendering
 	uint8_t bg_next_tile_id     = 0x00;
@@ -173,4 +172,5 @@ public:
 	void clock();
     void reset();
 	bool nmi = false;
+	bool scanline_trigger = false;
 };

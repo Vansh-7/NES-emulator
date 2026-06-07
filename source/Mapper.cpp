@@ -14,3 +14,21 @@ Mapper::~Mapper()
 void Mapper::reset()
 {
 }
+
+MIRROR Mapper::mirror()
+{
+	return MIRROR::HARDWARE;
+}
+
+bool Mapper::irqState()
+{
+	return false;
+}
+
+void Mapper::irqClear()
+{
+}
+
+void Mapper::scanline()
+{
+}
