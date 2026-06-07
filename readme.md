@@ -7,13 +7,16 @@ A highly accurate, hardware-level emulator for the Nintendo Entertainment System
 
 This project is a deep dive into low-level system architecture, successfully simulating the MOS 6502 microprocessor, the Ricoh 2C02 Picture Processing Unit (PPU), and the complex 2A03 Audio Processing Unit (APU) with cycle-accurate synchronization.
 
-## 📸 Showcase
+## 📸 Gameplay Showcase
 
-![NES Emulator Gameplay](assets/NES_gameplay.png)
-*Gameplay demonstration showing accurate background scrolling, foreground sprite priority, and real-time palette rendering.*
+My emulator is fully capable of running a variety of NES titles, demonstrating support for different hardware mappers and complex PPU rendering.
 
-![NES Emulator Gameplay](assets/NES_gameplay.gif)
-*Watch the emulator running in real-time with cycle-accurate sprite rendering.*
+| Game | Feature Highlight | Media |
+| :--- | :--- | :--- |
+| **Zelda II: The Adventure of Link** | Advanced Palette and Background Rendering | ![Zelda II Screenshot](assets/gameplay.png) |
+| **Super Mario Bros. 3** | Complex Scanline IRQ Counting & Mapper 004 (MMC3) | ![SMB3 Gameplay](assets/gameplay.gif) |
+
+*The above displays showcase the emulator's ability to handle different bank-switching logic (Mappers) and accurate, real-time graphical rendering for distinct NES game engines.*
 
 ---
 
