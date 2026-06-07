@@ -13,8 +13,8 @@ My emulator is fully capable of running a variety of NES titles, demonstrating s
 
 | Game | Feature Highlight | Media |
 | :--- | :--- | :--- |
-| **Zelda II: The Adventure of Link** | Advanced Palette and Background Rendering | ![Zelda II Screenshot](assets/gameplay.png) |
-| **Super Mario Bros. 3** | Complex Scanline IRQ Counting & Mapper 004 (MMC3) | ![SMB3 Gameplay](assets/gameplay.gif) |
+| **Zelda II: The Adventure of Link** | Advanced Palette and Background Rendering | ![Zelda II Screenshot](assets/NES_gameplay.png) |
+| **Super Mario Bros. 3** | Complex Scanline IRQ Counting & Mapper 004 (MMC3) | ![SMB3 Gameplay](assets/NES_gameplay.gif) |
 
 *The above displays showcase the emulator's ability to handle different bank-switching logic (Mappers) and accurate, real-time graphical rendering for distinct NES game engines.*
 
